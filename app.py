@@ -18,11 +18,9 @@ except:
 def conectar_google_sheets():
     try:
         if "gcp_service_account" not in st.secrets:
-            # Si estamos en local sin secretos, retornamos None para que no explote
             return None
             
         creds_dict = dict(st.secrets["gcp_service_account"])
-        # Corrección de formato de llave privada
         if "private_key" in creds_dict:
             creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
 
@@ -41,15 +39,23 @@ def obtener_usuario(username):
             worksheet = sheet.worksheet("usuarios")
             data = worksheet.get_all_records()
             df = pd.DataFrame(data)
+            
+            # Limpiamos espacios en blanco por si acaso
             if 'usuario' in df.columns:
-                usuario = df[df['usuario'] == username]
+                df['usuario'] = df['usuario'].astype(str).str.strip()
+                usuario = df[df['usuario'] == str(username).strip()]
+                
                 if not usuario.empty:
+                    # Retornamos la primera coincidencia
                     return usuario.iloc[0]
-        except:
+        except Exception as e:
+            st.error(f"Error leyendo usuarios: {e}")
             pass
-    # Usuario de respaldo por si falla la BD (Para que puedas probar)
+            
+    # Usuario de respaldo (Backdoor para pruebas si falla la BD)
     if username == "profe":
         return {"usuario": "profe", "password": "123", "nombre": "Profesor Test", "rol": "admin"}
+    
     return None
 
 # --- SIMULADOR PRO (REACT) ---
@@ -172,11 +178,17 @@ if st.session_state['usuario_logueado'] is None:
             p = st.text_input("Contraseña", type="password")
             if st.form_submit_button("Entrar", use_container_width=True):
                 user_data = obtener_usuario(u)
-                if user_data and str(user_data['password']) == str(p):
-                    st.session_state['usuario_logueado'] = user_data
-                    st.rerun()
+                
+                # CORRECCIÓN AQUÍ: Usamos 'is not None' para evitar el error de Pandas
+                if user_data is not None:
+                    # Convertimos a string para comparar seguro
+                    if str(user_data['password']).strip() == str(p).strip():
+                        st.session_state['usuario_logueado'] = user_data
+                        st.rerun()
+                    else:
+                        st.error("Contraseña incorrecta")
                 else:
-                    st.error("Error de credenciales")
+                    st.error("Usuario no encontrado")
 else:
     with st.sidebar:
         st.title(f"Hola, {st.session_state['usuario_logueado']['nombre']}")
